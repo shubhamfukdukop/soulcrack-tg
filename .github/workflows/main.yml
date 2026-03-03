@@ -2,7 +2,6 @@ name: soulcrack fucker
 on: [push]
 
 jobs:
-
   stage-0:
     runs-on: ubuntu-22.04
     strategy:
@@ -11,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Set CPU limit to 50%
+      - name: Install cpulimit
         run: |
           sudo apt-get update
           sudo apt-get install -y cpulimit
@@ -30,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Set CPU limit to 50%
+      - name: Install cpulimit
         run: |
           sudo apt-get update
           sudo apt-get install -y cpulimit
@@ -47,7 +46,7 @@ jobs:
     steps:
       - id: calc
         run: |
-          NUM_JOBS=$((60 / 10))
+          NUM_JOBS=$(($60 / 10))
           ARRAY=$(seq 1 $NUM_JOBS | jq -R . | jq -s -c .)
           echo "matrix_list=$ARRAY" >> $GITHUB_OUTPUT
 
@@ -61,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Set CPU limit to 50%
+      - name: Install cpulimit
         run: |
           sudo apt-get update
           sudo apt-get install -y cpulimit
